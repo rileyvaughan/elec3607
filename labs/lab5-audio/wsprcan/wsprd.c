@@ -35,12 +35,14 @@
 #include <stdint.h>
 #include <time.h>
 #include <fftw3.h>
-
 #include "fano.h"
 #include "jelinek.h"
 #include "nhash.h"
 #include "wsprd_utils.h"
 #include "wsprsim_utils.h"
+#include <pulse/simple.h>
+#include <pulse/gccmacro.h>
+#include <pulse/error.h>
 
 #define max(x,y) ((x) > (y) ? (x) : (y))
 // Possible PATIENCE options: FFTW_ESTIMATE, FFTW_ESTIMATE_PATIENT,
@@ -60,6 +62,9 @@ unsigned char pr3[162]=
     0,0};
 
 unsigned long nr;
+
+pa_simple *s;
+pa_sample_spec pts;
 
 int printdata=0;
 
@@ -115,6 +120,16 @@ unsigned long readwavfile(char *ptr_to_infile, int ntrmin, double *idat, double 
     nfft2=46080; //this is the number of downsampled points that will be returned
     nh2=nfft2/2;
     
+    static const pa_sample_spec pts = {
+	.format = PA_SAMPLE_S16LE,
+	.rate = 12000,
+	.channels = 1
+    };
+
+    pa_simple *s = NULL;
+    int ret = 1;
+    int error;
+
     if( ntrmin == 2 ) {
         nfft1=nfft2*32;      //need to downsample by a factor of 32
         df=12000.0/nfft1;
@@ -140,21 +155,22 @@ unsigned long readwavfile(char *ptr_to_infile, int ntrmin, double *idat, double 
         return 1;
     }
     
-    fp = fopen(ptr_to_infile,"rb");
-    if (fp == NULL) {
-        fprintf(stderr, "Cannot open data file '%s'\n", ptr_to_infile);
-        return 1;
-    }
-    nr=fread(buf2,2,22,fp);            //Read and ignore header
-    nr=fread(buf2,2,npoints,fp);       //Read raw data
-
-    fclose(fp);
-    if(nr!=npoints){
-		printf("Failed to read data file\n");
-		printf("requested: %lu got: %lu\n",npoints,nr);
-		return 1;
-	}
     
+    if (!(s = pa_simple_new(NULL, "wspr", PA_STREAM_RECORD, NULL, "record", &pts, NULL, NULL, &error))) {
+	fprintf(stderr, __FILE__": pa_simple_read() failed: %s\n", pa_strerror(error));
+    }
+
+    if (pa_simple_read(s, buf2, npoints * 2, &error) < 0) {
+	fprintf(stderr, __FILE__": pa_simple_read() failed: %s\n", pa_strerror(error));
+	}
+
+    nr = npoints;
+    if(nr!=npoints){
+	    printf("Failed to read data file\n");
+	    printf("requested: %lu got: %lu\n",npoints,nr);
+	    return 0;
+    }
+
     realin=(double*) fftw_malloc(sizeof(double)*nfft1);
     fftout=(fftw_complex*) fftw_malloc(sizeof(fftw_complex)*nfft1);
     PLAN1 = fftw_plan_dft_r2c_1d(nfft1, realin, fftout, PATIENCE);
@@ -596,7 +612,8 @@ int main(int argc, char *argv[])
     unsigned char *symbols, *channel_symbols;
     signed char message[]={-9,13,-35,123,57,-39,64,0,0,0,0};
     char *callsign, *call_loc_pow;
-    char *ptr_to_infile,*ptr_to_infile_suffix;
+    char *ptr_to_infile = NULL;
+    char *ptr_to_infile_suffix;
     char *data_dir=NULL;
     char wisdom_fname[200],all_fname[200],spots_fname[200];
     char timer_fname[200],hash_fname[200];
@@ -736,7 +753,7 @@ int main(int argc, char *argv[])
     
     if( optind+1 > argc) {
         usage();
-        return 1;
+	return 1;
     } else {
         ptr_to_infile=argv[optind];
     }
@@ -808,10 +825,10 @@ int main(int argc, char *argv[])
     }
     
     // Parse date and time from given filename
-    strncpy(date,ptr_to_infile_suffix-11,6);
-    strncpy(uttime,ptr_to_infile_suffix-4,4);
-    date[6]='\0';
-    uttime[4]='\0';
+    //strncpy(date,ptr_to_infile_suffix-11,6);
+    //strncpy(uttime,ptr_to_infile_suffix-4,4);
+    //date[6]='\0';
+    //uttime[4]='\0';
 
     // Do windowed ffts over 2 symbols, stepped by half symbols
     int nffts=4*floor(npoints/512)-1;
