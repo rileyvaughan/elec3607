@@ -3,25 +3,22 @@
 
 set AUDIODEV=hw:1
 
-DECODER=wsprcan/k9an-wsprd
-IQFILE="iq.wav"
-AUDIOFILE="audio.wav"
+DECODER=~/elec3607-labquestions/labs/lab5-audio/wsprcan/k9an-wsprd
 
-#TMPOUT='_wsprd.out'
+TMPOUT='_wsprd.out'
 
-#pactl load_module module_loopback source=alsa_input.usb-Plugable_Plugable_USB_Audio_Device_000000000000-00.analog-stereo
+pactl load_module module_loopback source=alsa_input.usb-Plugable_Plugable_USB_Audio_Device_000000000000-00.analog-stereo
 
-cd /elec3607-labquestions/labs/lab3-i2c/
+cd ~/elec3607-labquestions/labs/lab3-i2c/
 ./si5351
 
 
-#decode () {
-#	date
-#	echo "Run decode here"
-#	cd /elec3607-labquestions/labs/lab5-audio/
-#	paplay data/iq-16b.wav & ./wsprcan/k9an-wsprd
-#	#sleep 110
-#}
+decode () {
+	date
+	cd /elec3607-labquestions/labs/lab5-audio/
+	paplay data/iq-16b.wav & ./wsprcan/k9an-wsprd
+	#sleep 110
+}
 
 while true
 do
@@ -30,10 +27,7 @@ do
 	# wait for an even minute
 	if (("10#$min" % 2 == 0 && "10#$sec" == 0 )); then
 		echo -n "Executing wspr_decode "
-		date
-		rec -V1 -c 1 -t wav ${IQFILE} trim 0 118 &>/dev/null
-		sox ${IQFILE} -c 1 -t wav -r 12000 -b 16 ${AUDIOFILE}
-		${DECODER} ${AUDIOFILE}
+		decode
 	elif ((10#$sec < 49)); then
 		sleep 10
 	fi
